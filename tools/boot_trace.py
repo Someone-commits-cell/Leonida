@@ -63,6 +63,9 @@ def parse_startup(path: str, limit: int = 10) -> dict:
         "unimplemented": [],
         "unimplemented_by_dll": {},
         "debug_strings": 0,
+        "file_open_failed": [],
+        "file_open_failed_count": 0,
+        "int3_skipped": [],
         "exceptions": [],
         "exception_count": 0,
         "exit": None,
@@ -129,6 +132,18 @@ def parse_startup(path: str, limit: int = 10) -> dict:
                     )
             elif kind == "debug_string":
                 trace["debug_strings"] += 1
+            elif kind == "file_open_failed":
+                trace["file_open_failed_count"] += 1
+                if len(trace["file_open_failed"]) < limit:
+                    trace["file_open_failed"].append(
+                        {
+                            "path": event.get("path"),
+                            "error": event.get("error"),
+                            "caller": event.get("caller"),
+                        }
+                    )
+            elif kind == "int3_skipped":
+                trace["int3_skipped"].append(event.get("at"))
             elif kind == "exception":
                 trace["exception_count"] += 1
                 if limit <= 0:
@@ -169,6 +184,8 @@ def parse_d3d12(path: str, limit: int = 10) -> dict:
         "refused": [],
         "partial": [],
         "last_seq": 0,
+        "sequence_break_count": 0,
+        "sequence_breaks": [],
     }
     with _open_text(path) as fh:
         for line in fh:
@@ -179,6 +196,11 @@ def parse_d3d12(path: str, limit: int = 10) -> dict:
                 continue
             seq, method, outcome = int(match.group(1)), match.group(2), match.group(3)
             trace["calls"] += 1
+            expected = trace["last_seq"] + 1
+            if seq != expected:
+                trace["sequence_break_count"] += 1
+                if len(trace["sequence_breaks"]) < limit:
+                    trace["sequence_breaks"].append({"expected": expected, "observed": seq})
             trace["last_seq"] = seq
             trace["outcomes"][outcome] = trace["outcomes"].get(outcome, 0) + 1
             if method not in trace["first"]:
@@ -247,6 +269,14 @@ def format_text(summary: dict, limit: int) -> str:
             out.append("  unimplemented: none")
         if startup["debug_strings"]:
             out.append(f"  debug strings: {startup['debug_strings']} (text not shown)")
+        if startup["file_open_failed_count"]:
+            out.append(f"  failed file opens: {startup['file_open_failed_count']}")
+            for item in startup["file_open_failed"][:limit]:
+                out.append(f"    {item['path']} error {item['error']} from {item['caller']}")
+            if startup["file_open_failed_count"] > limit:
+                out.append(f"    ... {startup['file_open_failed_count'] - limit} more")
+        if startup["int3_skipped"]:
+            out.append(f"  int3 skipped (LEONIDA_SKIP_INT3, one per address): {_tail(startup['int3_skipped'], limit)}")
         if startup["exception_count"]:
             out.append(f"  exceptions: {startup['exception_count']}")
             for exc in startup["exceptions"][:limit]:
@@ -273,6 +303,10 @@ def format_text(summary: dict, limit: int) -> str:
             " (the [rt] diagnostics are not summarized)"
             + (f": {outcomes}" if outcomes else "")
         )
+        if d3d12["sequence_break_count"]:
+            out.append(f"  sequence breaks: {d3d12['sequence_break_count']}")
+            for item in d3d12["sequence_breaks"][:limit]:
+                out.append(f"    expected #{item['expected']}, observed #{item['observed']}")
         if d3d12["methods"]:
             out.append(f"  first per method: {_tail(d3d12['methods'], limit)}")
         if d3d12["unsupported"]:

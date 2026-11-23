@@ -59,8 +59,10 @@ stride or a hard-coded stream offset.
 On the measured package:
 
 - **1,589 records**, 1,589 distinct ids, range `0xB422`–`0xBFC6`, 272,442.8 s total.
-- **1,584 of 1,589** durations equal `AWC manifest duration / 2` within 0.01 s. The five exceptions
-  are duplicate-title or placeholder hash collisions.
+- **1,584 of 1,589** durations matched the AWC stream length within 0.01 s. The original
+  comparison halved the legacy manifest values to get the per-channel duration. The current
+  manifest reports the per-channel duration directly. The five exceptions are duplicate-title
+  or placeholder hash collisions.
 - **All 1,589** records map to an AWC stream id; the ids are the music streams exported by
   `tools/awc_opus.py`.
 - The records are grouped by contiguous id ranges that follow station order. The same config also
@@ -248,7 +250,8 @@ python -I tools/audio_config.py <carve dir or blob> [--json] [--names FILE] [--j
   `{records, summary}`.
 
 `--names` is optional. The package's debug name stream and the localization credits are local game
-files; nothing from them is committed.
+files; nothing from them is committed. Its strings are read as latin-1 bytes, the same bytes `joaat`
+hashes, so a title with an accented character resolves to the hash a record carries.
 
 ## Limits
 

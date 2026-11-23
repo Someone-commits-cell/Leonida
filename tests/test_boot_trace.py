@@ -264,6 +264,42 @@ class BootTraceTests(unittest.TestCase):
         )
         self.assertEqual(trace["refused"], [{"seq": 6, "method": "MapTiles"}])
         self.assertEqual(trace["last_seq"], 9)
+        self.assertEqual(trace["sequence_break_count"], 0)
+        self.assertEqual(trace["sequence_breaks"], [])
+
+    def test_sequence_breaks_count_boundaries_and_limit_examples(self):
+        self.write_lines(self.d3d12, [
+            "[d3d12-trace] #4 Foo called",
+            "[rt] ordinary diagnostic",
+            "[d3d12-trace] #5 Foo called",
+            "[d3d12-trace] #12 Foo called",
+            "[d3d12-trace] #1 Foo called",
+            "[d3d12-trace] #1 Foo failed",
+            "[d3d12-trace] #2 Foo called",
+        ])
+        examples = [
+            {"expected": 1, "observed": 4},
+            {"expected": 6, "observed": 12},
+            {"expected": 13, "observed": 1},
+            {"expected": 2, "observed": 1},
+        ]
+        for limit in (2, 4):
+            with self.subTest(limit=limit):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(bt.main(["--d3d12", self.d3d12, "--json", "--limit", str(limit)]), 0)
+                summary = json.loads(output.getvalue())
+                trace = summary["d3d12"]
+                self.assertEqual(trace["sequence_break_count"], 4)
+                self.assertEqual(trace["sequence_breaks"], examples[:limit])
+                self.assertEqual(trace["calls"], 6)
+                self.assertEqual(trace["outcomes"], {"called": 5, "failed": 1})
+                self.assertEqual(trace["last_seq"], 2)
+                self.assertEqual(trace["ignored_lines"], 1)
+                text = bt.format_text(summary, limit)
+                self.assertIn("sequence breaks: 4", text)
+                self.assertIn("expected #6, observed #12", text)
+                self.assertEqual(text.count("observed #"), limit)
 
     def test_powershell_error_record_prefix_keeps_the_first_call(self):
         self.write_lines(
@@ -288,6 +324,7 @@ class BootTraceTests(unittest.TestCase):
         self.assertIn("#5 SetMarker/BeginEvent with unknown metadata", text)
         self.assertIn("ID3D12CommandQueue::ExecuteCommandLists", text)
         self.assertIn("[rt] diagnostics are not summarized", text)
+        self.assertNotIn("sequence breaks", text)
 
     def test_partial_submissions_are_named_in_text_and_json(self):
         method = "ID3D12CommandQueue::ExecuteCommandLists"
@@ -403,6 +440,23 @@ class BootTraceTests(unittest.TestCase):
             "exit: 0",
         ):
             self.assertIn(needle, text)
+
+    def test_failed_file_opens_and_skipped_int3_are_listed(self):
+        self.write(
+            self.startup,
+            [
+                {"seq": 1, "kind": "trace_open", "pid": 1},
+                {"seq": 2, "kind": "file_open_failed", "api": "CreateFileW", "path": "GAME:/probe/missing.bin", "error": 2, "caller": "game.exe+0x20"},
+                {"seq": 3, "kind": "int3_skipped", "at": "game.exe+0x1330"},
+            ],
+        )
+        trace = bt.parse_startup(self.startup)
+        self.assertEqual(trace["file_open_failed"], [{"path": "GAME:/probe/missing.bin", "error": 2, "caller": "game.exe+0x20"}])
+        self.assertEqual(trace["int3_skipped"], ["game.exe+0x1330"])
+        text = bt.format_text(bt.summarize(trace, None), 10)
+        self.assertIn("failed file opens: 1", text)
+        self.assertIn("GAME:/probe/missing.bin error 2 from game.exe+0x20", text)
+        self.assertIn("game.exe+0x1330", text)
 
     def test_last_observed_tls_callback_in_incomplete_startup(self):
         first = {"kind": "tls_callback", "module": "first.dll", "at": "first.dll+0x1100", "reason": 1}

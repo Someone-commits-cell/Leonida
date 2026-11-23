@@ -165,7 +165,8 @@ them translates them again: `--no-float-controls` (drop `SignedZeroInfNanPreserv
 skips a shader without `shaderSignedZeroInfNanPreserveFloat32`; needs PR #664's translator flag), `--bary-fallback`
 (read raw barycentrics from an interpolated input, for devices without `VK_KHR_fragment_shader_barycentric`),
 `--texel-offset-fallback` (fold `image_sample*_o` offsets into the coordinate, for devices without
-`VK_KHR_maintenance8`) and `--mesh-compute` (mesh shaders as compute, for devices without `VK_EXT_mesh_shader`).
+`VK_KHR_maintenance8`) and `--mesh-compute` (mesh shaders as compute, for devices without `VK_EXT_mesh_shader`;
+on by itself on Intel's Windows Vulkan driver, whose native mesh draws crash, BUILD-2202, unless `--native-mesh`).
 Each is documented in [docs/design.md](docs/design.md).
 
 The build records which llvm-mc command and version produced the disassembly. Changing either, or reusing a work
@@ -179,10 +180,19 @@ each archive's models and textures and each texture pool. When it changes, the a
 makes it again. Older work folders have no record, so their models, textures and pools are exported once more after
 upgrading.
 
-Stages run in order: `check`, `shaders`, `assets`, `runtime`, `pipelines` (creates every translated shader on your
-GPU driver and checks that it compiles, reports any it has to skip, and saves a pipeline cache to
-`pipeline_cache.bin` in `--out`; the runtime doesn't load that cache yet, so it doesn't speed up the first boot). The
-shader translation is the longest step: it runs on `--jobs` processes (half the CPU threads by default).
+Stages: `check` always runs first; then `shaders`, `assets` and `runtime` run together when selected (they do not
+depend on each other). `pipelines` starts once the translated shaders are ready and, when this run includes runtime,
+that stage has finished rebuilding `vk_pipeline_check`, so it can overlap the rest of assets; it creates every
+translated shader on your GPU driver, reports any it has to skip, and saves a pipeline cache to `pipeline_cache.bin`
+in `--out` (the runtime doesn't load that cache yet, so it doesn't speed up the first boot). The shader translation
+is the longest CPU step: it runs on `--jobs` processes (half the CPU threads by default). When shaders and assets
+share the machine, that budget is split between them and passed to `rpf9dump` as `--jobs`; a solo assets run still
+lets `rpf9dump` use every core. Progress lines include percent and a rough ETA for translation shards, asset steps,
+and overall stage completion.
+
+On an interactive terminal, a LEONIDA setup screen lets you set jobs and whether stages overlap, then a key-switchable
+per-stage log view (`1`–`4` / `Tab`) keeps parallel output demuxed; full stage logs go under `work/logs/`. Use
+`--no-tui` (or redirect stdout) for the plain console.
 
 `--wav` is off by default because 16-bit PCM WAV is several times larger than Ogg Opus. It decodes the repackaged Ogg
 Opus streams to `work\assets\audio\wav` after the audio bank step; existing WAV files are skipped when a build resumes.
