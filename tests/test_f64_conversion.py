@@ -49,6 +49,10 @@ class F64ConversionTest(unittest.TestCase):
             value = result(rf"OpExtInst %float %glsl FClamp {value} %f0 %f1")
         word = result(rf"OpBitcast %uint {value}")
         dest = result(r"OpAccessChain %_ptr_Function_uint %vgpr %c3")
+        # This shader never writes EXEC, so every lane is active and the word is stored as it is
+        # (rdna2spirv exec_static_true); otherwise an OpSelect keeps the inactive lanes' old word.
+        if re.search(rf"(?m)^ *OpStore {dest} {word}$", spv):
+            return
         old_word = result(rf"OpLoad %uint {dest}")
         masked_word = result(rf"OpSelect %uint %\w+ {word} {old_word}")
         self.assertRegex(spv, rf"(?m)^ *OpStore {dest} {masked_word}$")
