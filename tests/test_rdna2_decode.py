@@ -364,6 +364,12 @@ class Rdna2DecodeUnitTests(unittest.TestCase):
                     llvm_insns.append(ins)
             dec = rdna2_decode.decode_bytes(bytes(raw), wave32=wave32)
             self.assertEqual(dec["invalid"], 0, path)
+            if "".join(li["enc"] for li in llvm_insns) != raw.hex():
+                # llvm-mc's disassembler does not read back the bytes its assembler wrote (LLVM 21 takes the 8-byte
+                # v_cvt_f16_u16_sdwa v5, 1.0 of ps_sdwa_f16_const.asm for a 12-byte form with a literal): there is
+                # no llvm listing to compare with, so the decoder must at least split the assembled bytes exactly.
+                self.assertEqual("".join(di["enc"] for di in dec["insns"]), raw.hex(), path)
+                continue
             self.assertEqual(len(dec["insns"]), len(llvm_insns), path)
             for li, di in zip(llvm_insns, dec["insns"]):
                 self.assertEqual(di["enc"], li["enc"], path)
