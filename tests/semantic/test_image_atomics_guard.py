@@ -78,6 +78,17 @@ def find_guarded_texel_block(spv):
     conditional branch whose condition is an OpLoad %bool %active, and return that block's instructions."""
     blocks = parse_blocks(spv)
     active_loads = set(re.findall(r"^\s*(%\w+) = OpLoad %bool %active\b", spv, re.M))
+    # After an EXEC write the lane's flag is an OpSelect %bool between the new mask bit and %active; follow it.
+    selects = re.findall(r"^\s*(%\w+) = OpSelect %bool (%\w+) (%\w+) (%\w+)$", spv, re.M)
+    grew = True
+    while grew:
+        grew = False
+        for res, _cond, a, b in selects:
+            if res not in active_loads and (a in active_loads or b in active_loads):
+                active_loads.add(res)
+                grew = True
+    # A shader that never writes EXEC has every lane active (rdna2spirv exec_static_true): the guard is %true.
+    active_loads.add("%true")
     guarded_targets = set()
     for insns in blocks.values():
         for i, ln in enumerate(insns):
@@ -175,6 +186,15 @@ class ImageAtomicsGuardTests(unittest.TestCase):
                     self.assertIn("OpAtomicLoad %uint ", spv)
                     self.assertIn("OpAtomicCompareExchange %uint ", spv)
                     self.assertIn("OpLoopMerge ", spv)
+
+    def test_atomic_after_an_exec_write_is_guarded_by_the_lane_flag(self):
+        # With EXEC written, lanes can be inactive: the guard must come from %active, not be %true.
+        spv = translate(["s_mov_b32 exec_lo, 0x0000ffff",
+                         "image_atomic_add v4, v[0:1], s[0:7] dmask:0x1 dim:SQ_RSRC_IMG_2D unorm"])
+        find_guarded_texel_block(spv)
+        self.assertRegex(spv, r"(?m)^\s*%\w+ = OpLoad %bool %active\b")
+        self.assertNotRegex(spv, r"(?m)^\s*OpBranchConditional %true ")
+        validate_spirv(spv)
 
     def test_cmpswap_and_bad_data_width_rejected(self):
         # Valid 2-VGPR cmpswap (2D and 3D) stays guarded and valid.
