@@ -12,7 +12,6 @@ These tests verify:
 """
 import os
 import re
-import shlex
 import shutil
 import struct
 import subprocess
@@ -21,6 +20,7 @@ import unittest
 
 import support
 import rdna2spirv
+import mc_command
 
 PS_EPILOGUE = ["exp mrt0 v0, v1, v2, v3 done vm", "s_endpgm"]
 CS_EPILOGUE = ["s_endpgm"]
@@ -52,7 +52,9 @@ def vdata_reg(dmask, d16=False):
 def llvm_mc_cmd():
     env = os.environ.get("LLVM_MC")
     if env:
-        return shlex.split(env)
+        # mc_command.split_command keeps a Windows path's backslashes; POSIX shlex.split dropped them
+        # (C:\Users\...\llvm-mc.exe became C:Users...llvm-mc.exe, WinError 2).
+        return mc_command.split_command(env)
     exe = shutil.which("llvm-mc")
     return [exe] if exe else None
 
