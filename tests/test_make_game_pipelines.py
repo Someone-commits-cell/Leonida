@@ -56,7 +56,8 @@ class PipelinesJobsTest(unittest.TestCase):
                                      os.path.join(self.out, "pipeline_cache.bin")])
 
     def test_jobs_on_the_command_line_reach_the_checker(self):
-        self.assertEqual(self.jobs_of(self.checker_args(lambda: self.main_with("--jobs", "5"))), "5")
+        with mock.patch("os.cpu_count", return_value=16):   # --jobs is clamped to the CPU count
+            self.assertEqual(self.jobs_of(self.checker_args(lambda: self.main_with("--jobs", "5"))), "5")
 
     def test_windows_reuses_the_checker_from_the_supplied_runtime_build(self):
         supplied = os.path.join(self.root, "unpacked runtime")

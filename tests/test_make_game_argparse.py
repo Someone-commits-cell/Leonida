@@ -319,7 +319,8 @@ class JobsHandlingTest(unittest.TestCase):
             work = os.path.join(tmp, "work")
             os.makedirs(game)
             with patch.object(sys, "argv", ["make_game.py", "--game", game, "--out", out, "--work", work,
-                                            "--no-tui", "--stages", "shaders", "--jobs", "6"]):
+                                            "--no-tui", "--stages", "shaders", "--jobs", "6"]), \
+                    patch("os.cpu_count", return_value=16):  # --jobs is clamped to the CPU count
                 with patch("make_game.below_normal"):
                     with patch("make_game.check", return_value={"expected_exe": "g.exe"}):
                         with patch("make_game.preflight") as mock_preflight:
@@ -346,7 +347,8 @@ class JobsHandlingTest(unittest.TestCase):
             work = os.path.join(tmp, "work")
             os.makedirs(game)
             with patch.object(sys, "argv", ["make_game.py", "--game", game, "--out", out, "--work", work,
-                                            "--no-tui", "--stages", "assets", "--wav", "--jobs", "10"]):
+                                            "--no-tui", "--stages", "assets", "--wav", "--jobs", "10"]), \
+                    patch("os.cpu_count", return_value=16):  # --jobs is clamped to the CPU count
                 with patch("make_game.below_normal"):
                     with patch("make_game.check", return_value={"expected_exe": "g.exe"}):
                         with patch("make_game.preflight"):
