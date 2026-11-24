@@ -48,6 +48,12 @@ class ResumeShardsTest(unittest.TestCase):
                 with open(os.path.join(spirv, f"index.part{self.i}.json"), "w", encoding="utf-8") as f:
                     json.dump({"tag": tag, "n": self.n}, f)
                 return 0
+
+            def poll(self):
+                # translate() polls every shard instead of waiting on each in turn; this fake is done at once.
+                if not hasattr(self, "code"):
+                    self.code = self.wait()
+                return self.code
         with mock.patch.object(make_game.subprocess, "Popen", side_effect=FakeProc), \
                 mock.patch.object(make_game, "py") as py, \
                 mock.patch.object(make_game, "translator_digest", return_value=digest), \
