@@ -35,8 +35,9 @@ TOTAL = (len(check.COMPUTE) + 7 + len(check.CS_DUMPS) + len(check.W64X_DUMPS) + 
          + len(check.PIXEL_TESTS) + len(check.CLIP_TESTS) + len(check.BOUNDS) + len(check.GLOBAL_OFFSET)
          + len(check.MIP_TEST_PASSES) + len(check.GRADIENT_TESTS)
          + len(check.STORE_WORDS) + len(check.GET_LOD_TESTS)
-         + len(check.TEXTURE_CONSTANTS) + 15)  # three mesh fixtures, ps_tex, ps_imgatomic, six compute fixtures,
-         # ps_ssharp, vs_base_ids, main's standalone cs_fmt_d16_xyz / cs_heap_init dumps (net one more case) and cs_fmt_all
+         + len(check.TEXTURE_CONSTANTS) + 16)  # three mesh fixtures, ps_tex, ps_imgatomic, six compute fixtures,
+         # ps_ssharp, vs_base_ids, main's standalone cs_fmt_d16_xyz / cs_heap_init dumps (net one more case), cs_fmt_all
+         # and ps_table_fetch
 CVT = {bits: [u, s] for bits, u, s in check.CVT_F32_SAT_CASES}
 
 
@@ -59,8 +60,13 @@ def cvt_answer(env, wrong_for=None):
 
 class Wave64Checks(unittest.TestCase):
     def run_checks(self, wavemask, ballot, *, missing_ballot=False, emulated=False, fmt=(0, GOOD_FMT)):
-        def harness(_tool, shader, *args, env=None):
+        def harness(_tool, shader, *args, env=None, cwd=None):
             name = Path(shader).stem
+            if name in ("fetch-sint", "fetch-uint", "fetch-miss"):
+                # ps_table_fetch: vk_texture_test <mode> <raw>, run from the SPIR-V folder.
+                self.assertIsNotNone(cwd)
+                Path(args[0]).write_bytes(bytes(64 * 64 * 4))
+                return 0, f"{name}: 4096 exact pixels\n"
             if name == "cs_fmt_1010102":
                 self.assertEqual(args, ("1", "dump"))
                 self.fmt_env, dump = env, Path(env["VKC_DUMP"])
@@ -266,7 +272,7 @@ class FloatToIntSweep(unittest.TestCase):
     def sweep(self, wrong_for=None):
         sent = []
 
-        def harness(_tool, shader, *_args, env=None):
+        def harness(_tool, shader, *_args, env=None, cwd=None):
             self.assertEqual(Path(shader).stem, "cs_cvt_f32_sat")
             sent.append(int(env["VKC_SGPRS"], 0))
             return cvt_answer(env, wrong_for)
@@ -289,7 +295,7 @@ class FloatToIntSweep(unittest.TestCase):
         # and the sweep reported it as "16 of 16 inputs wrong, first 0x00000000: SKIP (...)", a failure.
         calls = []
 
-        def harness(_tool, _shader, *_args, env=None):
+        def harness(_tool, _shader, *_args, env=None, cwd=None):
             calls.append(env.get("VKC_SUBGROUP_SIZE"))
             return 1, "compute subgroup size: 32 not available\n"
 
@@ -345,7 +351,7 @@ class PixelDeviceLimits(unittest.TestCase):
     """pixel_test with a fake harness: the device's limits decide SKIP instead of a failure."""
 
     def run_pixel(self, name, code, out, data=b""):
-        def harness(_tool, _vs, _fs, raw, env=None):
+        def harness(_tool, _vs, _fs, raw, env=None, cwd=None):
             if data:
                 Path(raw).write_bytes(data)
             return code, out
@@ -537,7 +543,7 @@ class SeededPixelTests(unittest.TestCase):
     def run_pixel_test(self, words, code=0, out=""):
         seen = {}
 
-        def harness(_tool, _vs, _fs, raw, env=None):
+        def harness(_tool, _vs, _fs, raw, env=None, cwd=None):
             seen["env"] = env
             if not code:
                 Path(raw).write_bytes(struct.pack("<4I", *words) * (64 * 64))
@@ -730,7 +736,7 @@ class GetLodChecks(unittest.TestCase):
         """get_lod_test with a fake vk_texture_test that writes frames[S# word 1]; returns (result, calls)."""
         calls = []
 
-        def harness(_tool, _vs, _fs, raw, *args, env=None):
+        def harness(_tool, _vs, _fs, raw, *args, env=None, cwd=None):
             calls.append(args)
             if not code:
                 Path(raw).write_bytes(frames[args[2]])
