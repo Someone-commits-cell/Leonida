@@ -125,8 +125,12 @@ def test_json_report_refuses_to_overwrite_index(tmp_path, capsys, output_kind):
     ctx = (mock.patch.multiple(report_paths, _resolved_key=mock.Mock(side_effect=str),
                                _same_resolved_name=probe)
            if output_kind == "folding-volume-case" else contextlib.nullcontext())
+    # Windows' realpath already returns the stored case (INDEX.JSON -> index.json), which would refuse before the
+    # probe; keep each name as typed so every platform takes the folding-volume branch.
     with ctx, (mock.patch.object(os.path, "samefile", side_effect=OSError("not same"))
-               if output_kind == "folding-volume-case" else contextlib.nullcontext()):
+               if output_kind == "folding-volume-case" else contextlib.nullcontext()), \
+            (mock.patch.object(os.path, "realpath", side_effect=os.path.abspath)
+             if output_kind == "folding-volume-case" else contextlib.nullcontext()):
         with pytest.raises(SystemExit) as exc:
             usc.main([str(index), "--json", str(output)])
     if output_kind == "folding-volume-case":
