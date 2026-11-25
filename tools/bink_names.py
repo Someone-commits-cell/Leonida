@@ -351,6 +351,14 @@ def write(out, rows, unmatched, summary):
             w.writerows(rows)
 
 
+def error_text(error):
+    """An OSError as "<path>: <reason>". str(OSError) quotes the path with repr(), which doubles every backslash
+    of a Windows path (C:\\Users\\...), so the path in the message was not the path the user typed."""
+    if isinstance(error, OSError) and error.filename:
+        return f"{error.filename}: {error.strerror or error}"
+    return str(error)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("source", help="an .rpf archive, a directory, or a bink_index.py CSV/JSON")
@@ -391,7 +399,7 @@ def main(argv=None):
     try:
         names = read_mount_lists(a.mount)
     except (OSError, ValueError) as error:
-        print(f"bink_names: error: {error}", file=sys.stderr)
+        print(f"bink_names: error: {error_text(error)}", file=sys.stderr)
         return 1
     try:
         streams = load_streams(a.source, skip_report=a.out if a.out and os.path.isfile(a.out) else None)

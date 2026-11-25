@@ -235,6 +235,14 @@ def tag_folder(root, names, dialogue=None, langs=(), dry_run=False, ambiguous=No
     return dict(sorted(stats.items()))
 
 
+def error_text(error):
+    """An OSError as "<path>: <reason>". str(OSError) quotes the path with repr(), which doubles every backslash
+    of a Windows path (C:\\Users\\...), so the path in the message was not the path the user typed."""
+    if isinstance(error, OSError) and error.filename:
+        return f"{error.filename}: {error.strerror or error}"
+    return str(error)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("opus", help="folder written by awc_opus.py")
@@ -259,7 +267,7 @@ def main(argv=None) -> int:
     try:
         stats = tag_folder(a.opus, names, dialogue, langs, a.dry_run, ambiguous)
     except OSError as e:
-        print(f"opus_tags: error: {e}", file=sys.stderr)
+        print(f"opus_tags: error: {error_text(e)}", file=sys.stderr)
         return 2
     for k, v in stats.items():
         print(f"{k:32} {v:,}")

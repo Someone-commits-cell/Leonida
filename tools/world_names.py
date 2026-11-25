@@ -636,6 +636,14 @@ def _write_json(path: str, data: dict) -> None:
         os.replace(tmp, path)
 
 
+def error_text(error):
+    """An OSError as "<path>: <reason>". str(OSError) quotes the path with repr(), which doubles every backslash
+    of a Windows path (C:\\Users\\...), so the path in the message was not the path the user typed."""
+    if isinstance(error, OSError) and error.filename:
+        return f"{error.filename}: {error.strerror or error}"
+    return str(error)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -671,7 +679,7 @@ def main(argv=None) -> int:
     try:
         return args.func(args)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        print(f"ERROR: {error_text(exc)}", file=sys.stderr)
         return 1
 
 
