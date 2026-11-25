@@ -9,6 +9,12 @@
   <br>
 </h1>
 
+> **About this copy.** This is a continuation of `ItsNotRexed/Leonida`, whose GitHub repository was deleted on
+> 2026-11-24. It holds the original history up to commit `1cc6e3c`, the main branch at `d9aa42a` (PR #6533) as
+> preserved by [Software Heritage](https://archive.softwareheritage.org/) (identical tree,
+> `8b94c2722784b2d804fe1b5cccf016e957b811aa`, without the commits in between), and fixes made since. The changes
+> are in the commits after that snapshot; like the original, everything here is GPL-3.0 (see [LICENSE](LICENSE)).
+
 <h4 align="center">Grand Theft Auto VI (Xbox Series) running natively on Windows, built on your PC from your own copy.
 </h4>
 
