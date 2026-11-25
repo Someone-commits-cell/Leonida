@@ -381,6 +381,20 @@ int main(int argc, char** argv) {
             int mismatches = 0, skipped = 0;
             for (std::size_t i = 0; i < ours.values.size(); ++i) {
                 const bool own_format = ours.names[i].find("[own format]") != std::string::npos;
+                // The host reads only its own blob format: AMD's driver (RX 7800 XT) accepts its serialized empty
+                // library with the last byte flipped, where NVIDIA's and WARP refuse it. Which bytes a driver checks
+                // is its own business, so a host that accepts that change is not compared (the call and its output).
+                const std::string flipped = "create: its own blob, last byte flipped";
+                const bool host_accepts_flip = ours.names[i].rfind(flipped, 0) == 0 && i < theirs.values.size() &&
+                                               theirs.values[ours.names[i] == flipped ? i : i - 1] == S_OK;
+                if (host_accepts_flip) {
+                    std::printf("pipeline library %s: ours 0x%llx host 0x%llx (the host does not check that byte "
+                                "of its own format; not compared)\n", ours.names[i].c_str(),
+                                static_cast<unsigned long long>(ours.values[i]),
+                                static_cast<unsigned long long>(theirs.values[i]));
+                    ++skipped;
+                    continue;
+                }
                 if (theirs.values[i] == kFaulted || own_format) {
                     std::printf("pipeline library %s: ours 0x%llx host 0x%llx (%s; not compared)\n",
                                 ours.names[i].c_str(), static_cast<unsigned long long>(ours.values[i]),
