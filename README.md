@@ -14,7 +14,9 @@
 > preserved), its second the main branch at `d9aa42a` (PR #6533) as preserved by
 > [Software Heritage](https://archive.softwareheritage.org/) (identical tree, `8b94c2722784b2d804fe1b5cccf016e957b811aa`,
 > without the commits in between). The changes made since are the commits after those two; like the original,
-> everything here is GPL-3.0 (see [LICENSE](LICENSE)).
+> everything here is GPL-3.0 (see [LICENSE](LICENSE)). Links to `ItsNotRexed/Leonida` issues and pull requests in the
+> README and docs went down with that repository: they are kept as citations (the number says where a measurement
+> was reported), not as pages to open.
 
 <h4 align="center">Grand Theft Auto VI (Xbox Series) running natively on Windows, built on your PC from your own copy.
 </h4>
@@ -91,7 +93,7 @@ The port isn't downloaded ready-made. It's built on your PC from your own copy.
 **The easy way:**
 
 1. Install the prerequisites below.
-2. Download this project **with its submodule**: `git clone --recursive https://github.com/ItsNotRexed/Leonida`. A
+2. Download this project **with its submodule**: `git clone --recursive https://github.com/Someone-commits-cell/Leonida`. A
    "Download ZIP" from GitHub leaves out `third_party/rpf9-explorer`. The build fetches it if `git` is installed,
    and otherwise tells you what to do.
 3. Double-click **`Build.bat`**.
