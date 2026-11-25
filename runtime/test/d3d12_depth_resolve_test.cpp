@@ -90,7 +90,8 @@ struct Planes {
 
 // Clears a 4x target with three overlapping values and the 1x destination to values none of them have, resolves
 // `c` and reads every plane of the destination back. A list whose Close fails is executed only when `run_invalid`
-// (the layer runs what it recorded; the host runtime must not be given such a list).
+// (the layer refuses it whole, and the destination is then read back by a list of its own; the host runtime must
+// not be given such a list).
 bool resolve_and_read(ID3D12Device* device, const Case& c, Planes& out, bool run_invalid,
                       const EdgeDraw* edge = nullptr) {
     Ref<ID3D12CommandQueue> queue;
@@ -187,6 +188,28 @@ bool resolve_and_read(ID3D12Device* device, const Case& c, Planes& out, bool run
         list->DrawInstanced(3, 1, 0, 0);
     }
 
+    // The layer refuses a whole list whose Close failed (none of its commands replay), so on the layer the clears run
+    // in a list of their own and the read-back below in another: a refused resolve then leaves a destination this
+    // test can still read. The host is never given a refused list, and runs everything in one.
+    UINT64 fence_value = 0;
+    const auto submit_and_wait = [&](ID3D12GraphicsCommandList* l) {
+        ID3D12CommandList* submitted[] = {l};
+        queue->ExecuteCommandLists(1, submitted);
+        CHECK(SUCCEEDED(queue->Signal(fence.p, ++fence_value)));
+        Event done;
+        CHECK(done.handle);
+        CHECK(SUCCEEDED(fence->SetEventOnCompletion(fence_value, done.handle)));
+        // 30 s, not 5 s: under `ctest -j 6` other GPU tests share the device (TEST-514 flake).
+        CHECK(WaitForSingleObject(done.handle, 30000) == WAIT_OBJECT_0);
+        return true;
+    };
+    if (run_invalid) {
+        CHECK(SUCCEEDED(list->Close()));
+        CHECK(submit_and_wait(list.p));
+        CHECK(SUCCEEDED(allocator->Reset()));
+        CHECK(SUCCEEDED(list->Reset(allocator.p, nullptr)));
+    }
+
     D3D12_RESOURCE_BARRIER barriers[2]{};
     for (auto& barrier : barriers) {
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -218,15 +241,27 @@ bool resolve_and_read(ID3D12Device* device, const Case& c, Planes& out, bool run
     }
     out.close = list->Close();
     if (FAILED(out.close) && !run_invalid) return true;
-    ID3D12CommandList* lists[] = {list.p};
-    queue->ExecuteCommandLists(1, lists);
-    CHECK(SUCCEEDED(queue->Signal(fence.p, 1)));
-    Event event;
-    CHECK(event.handle);
-    CHECK(SUCCEEDED(fence->SetEventOnCompletion(1, event.handle)));
-    // 30 s, not 5 s: under `ctest -j 6` other GPU tests share the device, and a fence can take longer
-    // than this test's idle runtime to signal (TEST-514 flake). Sibling tests already wait 15-60 s.
-    CHECK(WaitForSingleObject(event.handle, 30000) == WAIT_OBJECT_0);
+    CHECK(submit_and_wait(list.p));  // a refused list: the layer runs none of it
+    if (FAILED(out.close)) {
+        // Read the destination back as the refused list left it: still in DEPTH_WRITE, as nothing of it ran.
+        CHECK(SUCCEEDED(allocator->Reset()));
+        CHECK(SUCCEEDED(list->Reset(allocator.p, nullptr)));
+        barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+        barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        list->ResourceBarrier(1, &barriers[1]);
+        for (UINT i = 0; i < planes; ++i) {
+            D3D12_TEXTURE_COPY_LOCATION src{}, dst{};
+            src.pResource = target.p;
+            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            src.SubresourceIndex = i;
+            dst.pResource = readback.p;
+            dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            dst.PlacedFootprint = placed[i];
+            list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+        }
+        CHECK(SUCCEEDED(list->Close()));
+        CHECK(submit_and_wait(list.p));
+    }
     void* mapped = nullptr;
     const D3D12_RANGE range{0, SIZE_T(total)};
     CHECK(SUCCEEDED(readback->Map(0, &range, &mapped)) && mapped);
