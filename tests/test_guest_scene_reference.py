@@ -82,7 +82,10 @@ class GuestSceneReferenceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / "spirv").mkdir()
-            bad_loader = root / "invalid.exe"
+            # Not "invalid.exe": Windows takes an .exe without a PE header for a 16-bit program and stops on an
+            # "Unsupported 16-Bit Application" dialog until someone closes it, so the run timed out. Under another
+            # name CreateProcess fails at once (WinError 193), the launch failure this test is about.
+            bad_loader = root / "invalid.bin"
             bad_loader.write_bytes(b"synthetic input that is not an executable")
             bad_loader.chmod(0o700)
             out = root / "output"
